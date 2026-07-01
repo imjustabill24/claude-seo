@@ -73,6 +73,7 @@ in SECURITY.md.
 from __future__ import annotations
 
 import ipaddress
+import os
 import re
 import socket
 import threading
@@ -146,6 +147,33 @@ _BLOCKED_HOSTNAMES: frozenset[str] = frozenset(
         "fd00:ec2::254",    # AWS IMDS IPv6
     }
 )
+
+
+def _trusted_proxy_hosts() -> frozenset[str]:
+    """
+    Return the proxy host(s) the runtime has configured as its outbound egress.
+
+    In sandboxed / cloud runtimes (e.g. Claude Code on the web) *all* outbound
+    HTTPS is tunnelled through an operator-configured agent proxy, typically a
+    loopback literal such as ``127.0.0.1`` named in ``HTTPS_PROXY``. Without this
+    accommodation the DNS-pin fall-through in :func:`_pin_dns` refuses to resolve
+    that proxy hop as a private IP and aborts every fetch.
+
+    Only the *exact* host named in ``HTTPS_PROXY`` / ``https_proxy`` is trusted;
+    no other private, loopback, or reserved address is allowed through the guard.
+    The egress proxy enforces its own destination policy, so trusting the hop the
+    operator already forces every request through does not widen SSRF exposure.
+    Read at call time so tests and long-lived processes see the live environment.
+    """
+    hosts = set()
+    for var in ("HTTPS_PROXY", "https_proxy"):
+        raw = os.environ.get(var)
+        if not raw:
+            continue
+        host = urlparse(raw).hostname
+        if host:
+            hosts.add(host.lower())
+    return frozenset(hosts)
 
 
 class URLSafetyError(ValueError):
@@ -397,6 +425,13 @@ def _pin_dns(hostname: str, pinned_ip: str, port: int) -> Iterator[None]:
                 f"url_safety: address family {family} refused for pinned "
                 f"IPv4 host {host}",
             )
+
+        # Branch 1b: the operator-configured egress proxy hop. In sandboxed
+        # runtimes every request is tunnelled through this host (often a
+        # loopback literal); trust its own resolution rather than refusing it
+        # as a private IP. Only the exact HTTPS_PROXY host qualifies.
+        if host and host.lower() in _trusted_proxy_hosts():
+            return original_getaddrinfo(host, requested_port, *args, **kwargs)
 
         # Branch 2: every OTHER hostname (redirect target, embedded
         # subresource, library bookkeeping) gets resolved by the real

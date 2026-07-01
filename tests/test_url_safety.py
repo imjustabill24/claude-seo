@@ -308,6 +308,76 @@ def test_pin_dns_restores_getaddrinfo_on_normal_exit() -> None:
     assert socket.getaddrinfo is before
 
 
+# ---------------------------------------------------------------------------
+# _trusted_proxy_hosts + _pin_dns egress-proxy accommodation
+# (sandboxed/cloud runtimes tunnel all egress through a loopback proxy)
+# ---------------------------------------------------------------------------
+
+
+def test_trusted_proxy_hosts_empty_without_env() -> None:
+    with patch.dict(os.environ, {}, clear=True):
+        assert url_safety._trusted_proxy_hosts() == frozenset()
+
+
+@pytest.mark.parametrize("var", ["HTTPS_PROXY", "https_proxy"])
+def test_trusted_proxy_hosts_reads_configured_host(var: str) -> None:
+    with patch.dict(os.environ, {var: "http://127.0.0.1:40543"}, clear=True):
+        assert url_safety._trusted_proxy_hosts() == frozenset({"127.0.0.1"})
+
+
+def test_pin_dns_allows_configured_proxy_hop() -> None:
+    """
+    In sandboxed runtimes every request tunnels through the operator-configured
+    HTTPS_PROXY, usually a loopback literal. That hop must resolve even though
+    the address is private — otherwise the guard aborts every fetch.
+    """
+    original_getaddrinfo = socket.getaddrinfo
+
+    def fake_getaddrinfo(host, port, *args, **kwargs):
+        if host == "127.0.0.1":
+            return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("127.0.0.1", port or 443))]
+        return original_getaddrinfo(host, port, *args, **kwargs)
+
+    with patch.dict(os.environ, {"HTTPS_PROXY": "http://127.0.0.1:40543"}, clear=True):
+        with patch.object(url_safety.socket, "getaddrinfo", side_effect=fake_getaddrinfo):
+            with url_safety._pin_dns("pinned.example", "8.8.8.8", 443):
+                result = socket.getaddrinfo("127.0.0.1", 443)
+                assert result[0][4][0] == "127.0.0.1"
+
+
+def test_pin_dns_still_blocks_other_private_hosts_when_proxy_configured() -> None:
+    """The accommodation is exact-match only: a *different* private host (e.g. a
+    redirect to cloud metadata) is still refused even when a proxy is trusted."""
+    original_getaddrinfo = socket.getaddrinfo
+
+    def fake_getaddrinfo(host, port, *args, **kwargs):
+        if host == "redirected.example":
+            return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("169.254.169.254", port or 443))]
+        return original_getaddrinfo(host, port, *args, **kwargs)
+
+    with patch.dict(os.environ, {"HTTPS_PROXY": "http://127.0.0.1:40543"}, clear=True):
+        with patch.object(url_safety.socket, "getaddrinfo", side_effect=fake_getaddrinfo):
+            with url_safety._pin_dns("pinned.example", "8.8.8.8", 443):
+                with pytest.raises(socket.gaierror, match="non-public IP"):
+                    socket.getaddrinfo("redirected.example", 443)
+
+
+def test_pin_dns_blocks_proxy_address_when_no_proxy_configured() -> None:
+    """Without HTTPS_PROXY set, a loopback address gets no special treatment."""
+    original_getaddrinfo = socket.getaddrinfo
+
+    def fake_getaddrinfo(host, port, *args, **kwargs):
+        if host == "127.0.0.1":
+            return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("127.0.0.1", port or 443))]
+        return original_getaddrinfo(host, port, *args, **kwargs)
+
+    with patch.dict(os.environ, {}, clear=True):
+        with patch.object(url_safety.socket, "getaddrinfo", side_effect=fake_getaddrinfo):
+            with url_safety._pin_dns("pinned.example", "8.8.8.8", 443):
+                with pytest.raises(socket.gaierror, match="non-public IP"):
+                    socket.getaddrinfo("127.0.0.1", 443)
+
+
 def test_safe_requests_head_uses_strict_validation_and_dns_pin() -> None:
     captured: dict = {}
     response = SimpleNamespace(status_code=200)
