@@ -1,10 +1,18 @@
 # SharkBite (US/EN) — tracked URLs for SEO drift monitoring.
-# One URL per line. Lines starting with # and blank lines are ignored.
+#
+# Line types:
+#   * a page URL                 -> tracked directly
+#   * "@sitemap <url> [prefix]"  -> auto-expands to every page under [prefix]
+#                                   from the site's XML sitemap at run time
+#   * "#" comment / blank line   -> ignored
+#
+# The @sitemap directive means you DON'T list each page: it discovers the
+# current pages under /us/en/ from the sitemap every run. Cap the count with
+# SEO_SITEMAP_LIMIT (default 100).
 
-# --- Confirmed ---
+# Section root (kept explicit — the /us/en/ prefix below matches descendants,
+# not the bare /us/en homepage).
 https://www.sharkbite.com/us/en
 
-# --- Priority pages (UNCONFIRMED placeholders — verify real paths, then uncomment) ---
-# https://www.sharkbite.com/us/en/products
-# https://www.sharkbite.com/us/en/where-to-buy
-# https://www.sharkbite.com/us/en/support
+# Everything under /us/en/ , discovered from the sitemap.
+@sitemap https://www.sharkbite.com/ https://www.sharkbite.com/us/en/

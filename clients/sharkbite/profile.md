@@ -12,13 +12,25 @@
 
 ## Tracked URLs
 
-See [`urls.txt`](./urls.txt). Currently the confirmed page is the US/EN
-homepage. Add priority pages (top category/product pages, key landing pages)
-to `urls.txt` as they're confirmed — one URL per line.
+See [`urls.txt`](./urls.txt). Rather than listing every page, it tracks the
+whole `/us/en/` section via a sitemap directive:
 
-> ⚠️ Only the homepage is confirmed. Placeholder priority pages are commented
-> out in `urls.txt` so they aren't fetched until verified (avoids baselining
-> 404s). Uncomment and correct them once the real paths are known.
+```
+https://www.sharkbite.com/us/en                                   # section root (explicit)
+@sitemap https://www.sharkbite.com/ https://www.sharkbite.com/us/en/   # everything under /us/en/
+```
+
+The `@sitemap <url> [prefix]` line is expanded at run time by
+`scripts/sitemap_urls.py`: it discovers the site's XML sitemap (via robots.txt
+and common locations), follows any sitemap-index files, and returns every page
+whose URL starts with the prefix. So new pages under `/us/en/` are picked up
+automatically on each run — no manual list to maintain.
+
+> **Prefix note:** `/us/en/` (trailing slash) matches descendants but not the
+> bare `/us/en` homepage, so the homepage is listed explicitly above.
+> **Volume:** expansion is capped by `SEO_SITEMAP_LIMIT` (default 100). A large
+> site can have thousands of URLs — raise the cap deliberately, since each URL
+> is a fetch on every baseline/compare run.
 
 ## Cadence
 

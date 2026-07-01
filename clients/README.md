@@ -7,8 +7,27 @@ Each client lives in its own directory (`clients/<client-slug>/`) and holds:
 | File | Purpose |
 |------|---------|
 | `profile.md` | Client overview, tracked URLs, cadence, and the exact commands to run |
-| `urls.txt` | One tracked URL per line (`#` comments and blank lines ignored) |
+| `urls.txt` | Tracked URLs — one per line, or an `@sitemap` directive (see below); `#` comments and blank lines ignored |
 | `track.sh` | Convenience wrapper: runs a drift command over every URL in `urls.txt` |
+
+### Tracking a whole section without listing pages
+
+`urls.txt` accepts a directive line:
+
+```
+@sitemap <sitemap-or-site-url> [prefix]
+```
+
+At run time `track.sh` expands it via `scripts/sitemap_urls.py`, which discovers
+the site's XML sitemap (robots.txt + common locations), follows sitemap-index
+files, and returns every page URL starting with `[prefix]`. This means you track
+`/section/*` by maintaining the **prefix**, not the page list — new pages are
+picked up automatically. Cap expansion with `SEO_SITEMAP_LIMIT` (default 100).
+
+> **Network policy is per-domain, not per-page.** Allowlisting `example.com`
+> (or using **Full**) covers every URL on the domain; there is no per-path
+> egress setting. The `@sitemap` prefix only controls *which pages get
+> baselined*, not what the network permits.
 
 ## Why this exists
 
