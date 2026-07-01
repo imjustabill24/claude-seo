@@ -1,0 +1,10 @@
+# SharkBite (US/EN) — tracked URLs for SEO drift monitoring.
+# One URL per line. Lines starting with # and blank lines are ignored.
+
+# --- Confirmed ---
+https://www.sharkbite.com/us/en
+
+# --- Priority pages (UNCONFIRMED placeholders — verify real paths, then uncomment) ---
+# https://www.sharkbite.com/us/en/products
+# https://www.sharkbite.com/us/en/where-to-buy
+# https://www.sharkbite.com/us/en/support
